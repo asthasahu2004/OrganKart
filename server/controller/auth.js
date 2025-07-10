@@ -2,9 +2,8 @@ const { toTitleCase, validateEmail } = require("../config/function");
 const bcrypt = require("bcryptjs");
 const userModel = require("../models/users");
 const jwt = require("jsonwebtoken");
-const { JWT_SECRET } = require("../config/keys");
 require("dotenv").config(); // should be at the top
-
+const JWT_SECRET = process.env.JWT_SECRET;
 class Auth {
   async isAdmin(req, res) {
     let { loggedInUserId } = req.body;

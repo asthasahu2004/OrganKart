@@ -5,6 +5,21 @@ const Product = require("../models/products"); // Correct path to products model
 const Category = require("../models/categories"); // Correct path to categories model
 const User = require("../models/users"); // Correct path to users model
 const { loginCheck } = require("../middleware/auth"); // Use your existing auth middleware
+const multer = require("multer");
+const path = require("path");
+
+// Set destination and filename
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "public/uploads/donations");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "_" + file.originalname;
+    cb(null, uniqueSuffix);
+  }
+});
+
+const upload = multer({ storage });
 
 // Helper function to check if user is admin
 const isAdmin = (req, res, next) => {
@@ -18,44 +33,135 @@ const isAdmin = (req, res, next) => {
 };
 
 // CREATE DONATION REQUEST
-router.post("/create", loginCheck, async (req, res) => {
+// CREATE DONATION REQUEST - CORRECTED VERSION
+// Enhanced debugging version of your donation request route
+router.post("/create", loginCheck, upload.array("images", 5), async (req, res) => {
   try {
-    const { organName, category, images, pinCode, description, quantity } = req.body;
+    console.log("=== DETAILED DEBUGGING BACKEND REQUEST ===");
+    console.log("req.body:", JSON.stringify(req.body, null, 2));
+    console.log("req.files:", req.files?.map(f => ({ 
+      fieldname: f.fieldname, 
+      originalname: f.originalname, 
+      size: f.size,
+      mimetype: f.mimetype
+    })));
+    console.log("req.user:", req.user);
+    console.log("=== VALIDATION CHECKS ===");
 
-    // Validate category exists
-    const categoryExists = await Category.findById(category);
-    if (!categoryExists) {
+    const { organName, category, pinCode, description, quantity } = req.body;
+
+    // Check 1: Organ name validation
+    console.log("1. Organ name check:", { organName, isValid: !(!organName || !organName.trim()) });
+    if (!organName || !organName.trim()) {
+      console.log("❌ FAILED: Organ name validation");
       return res.status(400).json({
         success: false,
-        message: "Invalid category selected"
+        message: "Organ name is required",
+        debug: { organName, trimmed: organName?.trim() }
       });
     }
 
-    // Check if user has pending requests for the same organ
+    // Check 2: Category validation
+    console.log("2. Category check:", { category, isValid: !!category });
+    if (!category) {
+      console.log("❌ FAILED: Category validation");
+      return res.status(400).json({
+        success: false,
+        message: "Category is required",
+        debug: { category }
+      });
+    }
+
+    // Check 3: Pin code validation
+    console.log("3. Pin code check:", { pinCode, length: pinCode?.length, isValid: pinCode && pinCode.length === 6 });
+    if (!pinCode || pinCode.length !== 6) {
+      console.log("❌ FAILED: Pin code validation");
+      return res.status(400).json({
+        success: false,
+        message: "Valid 6-digit pin code is required",
+        debug: { pinCode, length: pinCode?.length }
+      });
+    }
+
+    // Check 4: Description validation
+    console.log("4. Description check:", { 
+      description, 
+      trimmedLength: description?.trim().length, 
+      isValid: description && description.trim().length >= 10 
+    });
+    if (!description || description.trim().length < 10) {
+      console.log("❌ FAILED: Description validation");
+      return res.status(400).json({
+        success: false,
+        message: "Description must be at least 10 characters",
+        debug: { description, trimmedLength: description?.trim().length }
+      });
+    }
+
+    // Check 5: Files validation
+    console.log("5. Files check:", { 
+      hasFiles: !!(req.files && req.files.length > 0),
+      fileCount: req.files?.length || 0
+    });
+    if (!req.files || req.files.length === 0) {
+      console.log("❌ FAILED: Files validation");
+      return res.status(400).json({
+        success: false,
+        message: "At least one image is required",
+        debug: { files: req.files, fileCount: req.files?.length || 0 }
+      });
+    }
+
+    // Check 6: Category exists in database
+    console.log("6. Category existence check - querying database...");
+    const categoryExists = await Category.findById(category);
+    console.log("Category query result:", { category, exists: !!categoryExists });
+    if (!categoryExists) {
+      console.log("❌ FAILED: Category existence validation");
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid category selected",
+        debug: { category, found: !!categoryExists }
+      });
+    }
+
+    // Check 7: Existing request check
+    console.log("7. Existing request check - querying database...");
     const existingRequest = await DonationRequest.findOne({
       requestedBy: req.user._id,
       organName: organName.trim(),
       status: "Pending"
     });
-
+    console.log("Existing request result:", { exists: !!existingRequest });
     if (existingRequest) {
+      console.log("❌ FAILED: Existing request validation");
       return res.status(400).json({
         success: false,
-        message: "You already have a pending request for this organ"
+        message: "You already have a pending request for this organ",
+        debug: { existingRequestId: existingRequest._id }
       });
     }
+
+    console.log("✅ ALL VALIDATIONS PASSED - Creating donation request...");
+
+    // Get image paths from uploaded files
+    const imagePaths = req.files.map(file => `/uploads/donations/${file.filename}`);
 
     const donationRequest = new DonationRequest({
       organName: organName.trim(),
       category,
-      images,
+      images: imagePaths,
       pinCode,
       description: description.trim(),
       quantity: quantity || 1,
       requestedBy: req.user._id
     });
 
+    console.log("Donation request object to save:", donationRequest);
+
     await donationRequest.save();
+
+    console.log("✅ Successfully created donation request:", donationRequest);
 
     res.status(201).json({
       success: true,
@@ -64,24 +170,51 @@ router.post("/create", loginCheck, async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error creating donation request:", error);
-    
+    console.error("❌ ERROR in donation request creation:", error);
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(e => e.message);
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors
+      console.log("Validation errors:", errors);
+      return res.status(400).json({ 
+        success: false, 
+        message: "Validation failed", 
+        errors,
+        debug: { validationError: error.errors }
       });
     }
 
     res.status(500).json({
       success: false,
       message: "Failed to create donation request",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      debug: { errorName: error.name, errorMessage: error.message }
     });
   }
 });
+
+// Additional debugging middleware to check what's being sent
+router.use('/create', (req, res, next) => {
+  console.log('=== RAW REQUEST DEBUG ===');
+  console.log('Headers:', req.headers);
+  console.log('Content-Type:', req.get('Content-Type'));
+  console.log('Body keys:', Object.keys(req.body || {}));
+  console.log('Files received:', req.files ? req.files.length : 0);
+  next();
+});
+
+// Test endpoint to verify form data parsing
+router.post('/test-form', upload.array("images", 5), (req, res) => {
+  res.json({
+    body: req.body,
+    files: req.files?.map(f => ({
+      fieldname: f.fieldname,
+      originalname: f.originalname,
+      size: f.size
+    })) || [],
+    message: "Form data parsing test"
+  });
+});
+
 
 // GET ALL DONATION REQUESTS (ADMIN ONLY)
 router.get("/all", loginCheck, isAdmin, async (req, res) => {

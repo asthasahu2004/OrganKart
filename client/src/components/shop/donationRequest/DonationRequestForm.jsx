@@ -6,33 +6,35 @@ const DonationRequestForm = () => {
   const [formData, setFormData] = useState({
     organName: '',
     category: '',
-    images: [],
+    images: [], // Store actual File objects
     pinCode: '',
     description: '',
     quantity: 1
   });
+  const [imagePreview, setImagePreview] = useState([]); // Separate state for preview URLs
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const API_BASE_URL = 'http://localhost:8000';
 
   useEffect(() => {
     fetchCategories();
   }, []);
 
   const fetchCategories = async () => {
-  try {
-    const response = await axios.get('http://localhost:8000/api/category/all-category');
-    console.log("Fetched categories:", response.data); // 👈 Add this
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/category/all-category`);
+      console.log("Fetched categories:", response.data);
 
-    if (response.data.Categories) {
-      setCategories(response.data.Categories);
+      if (response.data.Categories) {
+        setCategories(response.data.Categories);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      toast.error('Failed to load categories');
     }
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    toast.error('Failed to load categories');
-  }
-};
-
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -41,7 +43,6 @@ const DonationRequestForm = () => {
       [name]: value
     }));
     
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -50,30 +51,19 @@ const DonationRequestForm = () => {
     }
   };
 
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    const formData = new FormData();
-    files.forEach(file => {
-      formData.append('images', file);
-    });
+    // Store actual file objects
+    setFormData(prev => ({
+      ...prev,
+      images: files
+    }));
 
-    try {
-      setLoading(true);
-      // You'll need to create an image upload endpoint or use your existing one
-      // For now, we'll simulate the upload
-      const imageUrls = files.map(file => URL.createObjectURL(file));
-      setFormData(prev => ({
-        ...prev,
-        images: imageUrls
-      }));
-    } catch (error) {
-      console.error('Error uploading images:', error);
-      toast.error('Failed to upload images');
-    } finally {
-      setLoading(false);
-    }
+    // Create preview URLs
+    const previewUrls = files.map(file => URL.createObjectURL(file));
+    setImagePreview(previewUrls);
   };
 
   const validateForm = () => {
@@ -91,49 +81,104 @@ const DonationRequestForm = () => {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!validateForm()) return;
+    if (!validateForm()) return;
 
-  setLoading(true);
+    setLoading(true);
 
-  try {
-    const rawToken = localStorage.getItem('jwt');
-    const parsed = rawToken ? JSON.parse(rawToken) : null;
-    const token = parsed?.token;
+    try {
+      const rawToken = localStorage.getItem('jwt');
+      let token;
+      
+      if (rawToken) {
+        try {
+          const parsed = JSON.parse(rawToken);
+          token = parsed?.token;
+        } catch (parseError) {
+          token = rawToken;
+        }
+      }
 
-    const response = await axios.post('/api/donation-request/create', formData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+      if (!token) {
+        toast.error('Please login to submit a donation request');
+        return;
+      }
 
-    if (response.data.success) {
-      toast.success('Donation request submitted successfully!');
-      setFormData({
-        organName: '',
-        category: '',
-        images: [],
-        pinCode: '',
-        description: '',
-        quantity: 1,
+      // Create FormData for file upload
+      const submitFormData = new FormData();
+      submitFormData.append('organName', formData.organName);
+      submitFormData.append('category', formData.category);
+      submitFormData.append('pinCode', formData.pinCode);
+      submitFormData.append('description', formData.description);
+      submitFormData.append('quantity', formData.quantity);
+      
+      // Append all image files
+      formData.images.forEach((file) => {
+        submitFormData.append('images', file);
       });
-      const fileInput = document.getElementById('images');
-      if (fileInput) fileInput.value = '';
-    }
-  } catch (error) {
-    console.error('Error submitting donation request:', error);
-    if (error.response?.data?.errors) {
-      toast.error(error.response.data.errors.join(', '));
-    } else {
-      toast.error(error.response?.data?.message || 'Failed to submit request');
-    }
-  } finally {
-    setLoading(false);
-  }
-};
 
+      // Debug: Log what we're sending
+      console.log('=== DEBUGGING FORM SUBMISSION ===');
+      console.log('Form data values:');
+      for (let [key, value] of submitFormData.entries()) {
+        if (key === 'images') {
+          console.log(`${key}:`, value.name, value.size, value.type);
+        } else {
+          console.log(`${key}:`, value);
+        }
+      }
+      console.log('Token (first 20 chars):', token?.substring(0, 20));
+      console.log('=== END DEBUG ===');
+
+      const response = await axios.post(
+        `${API_BASE_URL}/api/donation-request/create`, 
+        submitFormData, 
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            // Don't set Content-Type manually for FormData - let axios handle it
+          },
+        }
+      );
+
+      if (response.data.success) {
+        toast.success('Donation request submitted successfully!');
+        
+        // Reset form
+        setFormData({
+          organName: '',
+          category: '',
+          images: [],
+          pinCode: '',
+          description: '',
+          quantity: 1,
+        });
+        setImagePreview([]);
+        
+        // Clear file input
+        const fileInput = document.getElementById('images');
+        if (fileInput) fileInput.value = '';
+      }
+    } catch (error) {
+      console.error('=== ERROR DETAILS ===');
+      console.error('Full error:', error);
+      console.error('Response status:', error.response?.status);
+      console.error('Response data:', error.response?.data);
+      console.error('Response headers:', error.response?.headers);
+      console.error('=== END ERROR DETAILS ===');
+      
+      if (error.response?.status === 401) {
+        toast.error('Authentication failed. Please login again.');
+      } else if (error.response?.data?.errors) {
+        toast.error(error.response.data.errors.join(', '));
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to submit request');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
@@ -186,9 +231,9 @@ const DonationRequestForm = () => {
             className="w-full p-3 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={loading}
           />
-          {formData.images.length > 0 && (
+          {imagePreview.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
-              {formData.images.map((image, index) => (
+              {imagePreview.map((image, index) => (
                 <div key={index} className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center">
                   <img src={image} alt={`Preview ${index + 1}`} className="w-full h-full object-cover rounded-lg" />
                 </div>
