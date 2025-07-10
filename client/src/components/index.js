@@ -60,7 +60,11 @@ const Routes = (props) => {
           path="/admin/dashboard/orders"
           component={Orders}
         />
-        
+        <AdminProtectedRoute
+          exact={true}
+          path="/admin/dashboard/donation-requests"
+          component={AdminDonationRequests}
+        />
         {/* Admin Routes End */}
 
         {/* User Dashboard */}
