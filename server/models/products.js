@@ -51,10 +51,17 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
     donatedBy: {
-      type: ObjectId,
-      ref: "users",
-      required: true,
-    },
+  type: ObjectId,
+  ref: "users"
+},
+isDonated: {
+  type: Boolean,
+  default: false
+},
+donationRequestId: {
+  type: ObjectId,
+  ref: "donationrequests"
+},
   },
   { timestamps: true }
 );

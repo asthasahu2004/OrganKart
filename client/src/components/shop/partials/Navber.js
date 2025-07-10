@@ -158,6 +158,22 @@ const Navber = (props) => {
                             <span>Requests</span>
                           </span>
                           <span
+  onClick={(e) => history.push("/donation-request")}
+  className="flex space-x-2 py-2 px-8 hover:bg-gray-400 cursor-pointer"
+>
+  <span>📝</span>
+  <span>Request Organ</span>
+</span>
+
+<span
+  onClick={(e) => history.push("/my-donation-requests")}
+  className="flex space-x-2 py-2 px-8 hover:bg-gray-400 cursor-pointer"
+>
+  <span>📋</span>
+  <span>My Requests</span>
+</span>
+
+                          <span
                             onClick={(e) => history.push("/user/profile")}
                             className="flex space-x-2 py-2 px-8 hover:bg-gray-400 cursor-pointer"
                           >

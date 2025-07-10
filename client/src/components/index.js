@@ -14,6 +14,9 @@ import { DashboardAdmin, Categories, Products, Orders } from "./admin";
 import { UserProfile, UserOrders, SettingUser } from "./shop/dashboardUser";
 
 import { BrowserRouter as Router, Switch, Route } from "react-router-dom";
+import DonationRequestForm from "../components/shop/donationRequest/DonationRequestForm";
+import MyDonationRequests from "../components/shop/donationRequest/MyDonationRequests";
+import AdminDonationRequests from "../components/admin/donationRequests/DonationRequestsList";
 
 /* Routing All page will be here */
 const Routes = (props) => {
@@ -57,6 +60,11 @@ const Routes = (props) => {
           path="/admin/dashboard/orders"
           component={Orders}
         />
+        <AdminProtectedRoute
+          exact={true}
+          path="/admin/dashboard/donation-requests"
+          component={AdminDonationRequests}
+        />
         {/* Admin Routes End */}
 
         {/* User Dashboard */}
@@ -75,6 +83,16 @@ const Routes = (props) => {
           path="/user/setting"
           component={SettingUser}
         />
+        <ProtectedRoute
+          exact={true}
+          path="/donation-request"
+          component={DonationRequestForm}
+        />
+        <ProtectedRoute
+          exact={true}
+          path="/my-donation-requests"
+          component={MyDonationRequests}
+        />
         {/* User Dashboard End */}
 
         {/* 404 Page */}
@@ -85,3 +103,4 @@ const Routes = (props) => {
 };
 
 export default Routes;
+
